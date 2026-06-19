@@ -141,6 +141,17 @@ def get_gspread_client():
         st.session_state.gspread_client = gspread.service_account_from_dict(creds_dict)
     return st.session_state.gspread_client
 
+@st.cache_data(ttl=600)
+def fetch_quote() -> str:
+    """從 Quote_DB 的 A1 格讀取本週金句。"""
+    try:
+        client = get_gspread_client()
+        sheet = client.open("Quote_DB").sheet1
+        val = sheet.acell("A1").value
+        return str(val).strip() if val else "每一天都是新的開始。"
+    except Exception:
+        return "每一天都是新的開始。"
+
 def _sheet_to_dicts(rows: list[list]) -> list[dict]:
     """
     將無標題列的原始資料轉為 dict 清單。
@@ -345,11 +356,10 @@ selected_name = st.selectbox("選擇學員", names, label_visibility="collapsed"
 # 星期大標題
 st.markdown(f'<div class="day-title">📅 {weekday_str}</div>', unsafe_allow_html=True)
 
-# 教練語錄
+# 教練語錄（從 Quote_DB A1 動態讀取）
+quote = fetch_quote()
 st.markdown(
-    '<div class="coach-quote">'
-    '「就算沒有完成也沒關係…<br>去思考為什麼會變成這個狀態？」'
-    '</div>',
+    f'<div class="coach-quote">「{quote}」</div>',
     unsafe_allow_html=True,
 )
 
