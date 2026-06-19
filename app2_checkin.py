@@ -149,8 +149,8 @@ def fetch_quote() -> str:
             sheet = client.open("Quote_DB").sheet1
             val = sheet.acell("A1").value
             st.session_state.cached_quote = str(val).strip() if val else "每一天都是新的開始。"
-        except Exception:
-            st.session_state.cached_quote = "每一天都是新的開始。"
+        except Exception as e:
+            st.session_state.cached_quote = f"[DEBUG] 讀取失敗：{type(e).__name__}: {e}"
     return st.session_state.cached_quote
 
 def _sheet_to_dicts(rows: list[list]) -> list[dict]:
