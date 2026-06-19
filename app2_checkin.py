@@ -141,16 +141,17 @@ def get_gspread_client():
         st.session_state.gspread_client = gspread.service_account_from_dict(creds_dict)
     return st.session_state.gspread_client
 
-@st.cache_data(ttl=600)
 def fetch_quote() -> str:
-    """從 Quote_DB 的 A1 格讀取本週金句。"""
-    try:
-        client = get_gspread_client()
-        sheet = client.open("Quote_DB").sheet1
-        val = sheet.acell("A1").value
-        return str(val).strip() if val else "每一天都是新的開始。"
-    except Exception:
-        return "每一天都是新的開始。"
+    """從 Quote_DB 的 A1 格讀取本週金句，結果存在 session_state 避免重複請求。"""
+    if "cached_quote" not in st.session_state:
+        try:
+            client = get_gspread_client()
+            sheet = client.open("Quote_DB").sheet1
+            val = sheet.acell("A1").value
+            st.session_state.cached_quote = str(val).strip() if val else "每一天都是新的開始。"
+        except Exception:
+            st.session_state.cached_quote = "每一天都是新的開始。"
+    return st.session_state.cached_quote
 
 def _sheet_to_dicts(rows: list[list]) -> list[dict]:
     """
