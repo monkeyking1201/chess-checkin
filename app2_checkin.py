@@ -146,7 +146,7 @@ def fetch_quote() -> str:
     if "cached_quote" not in st.session_state:
         try:
             client = get_gspread_client()
-            sheet = client.open("Quote_DB").sheet1
+            sheet = client.open_by_key("1B8FATDRZxDOopEGOaLChn7M4GRrdte7pWIBKhEOJ6sA").sheet1
             val = sheet.acell("A1").value
             st.session_state.cached_quote = str(val).strip() if val else "每一天都是新的開始。"
         except Exception as e:
