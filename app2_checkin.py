@@ -195,17 +195,18 @@ def fetch_schedule(name: str, weekday_str: str) -> list[dict]:
         return []
 
 def get_student_names() -> list[str]:
-    """從 Schedule_DB 讀取不重複的學員姓名清單。"""
-    try:
-        client = get_gspread_client()
-        sheet = client.open("Schedule_DB").sheet1
-        rows = sheet.get_all_values()
-        records = _sheet_to_dicts(rows)
-        names = sorted({r["姓名"] for r in records if r.get("姓名")})
-        return names
-    except Exception as e:
-        st.error(f"讀取學員名單失敗：{e}")
-        return []
+    """從 Schedule_DB 讀取不重複的學員姓名清單，session 內快取避免超出 API 限額。"""
+    if "student_names" not in st.session_state:
+        try:
+            client = get_gspread_client()
+            sheet = client.open("Schedule_DB").sheet1
+            rows = sheet.get_all_values()
+            records = _sheet_to_dicts(rows)
+            st.session_state.student_names = sorted({r["姓名"] for r in records if r.get("姓名")})
+        except Exception as e:
+            st.error(f"讀取學員名單失敗：{e}")
+            st.session_state.student_names = []
+    return st.session_state.student_names
 
 def append_logs(rows: list[list]):
     """批次寫入紀錄到 Log_DB 工作表。"""
