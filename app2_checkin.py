@@ -292,6 +292,8 @@ if "submit_summary" not in st.session_state:
     st.session_state.submit_summary = []
 if "choices" not in st.session_state:
     st.session_state.choices = {}
+if "replace_reasons" not in st.session_state:
+    st.session_state.replace_reasons = {}  # key -> 替換原因文字
 
 # ─────────────────────────────────────────
 # 4. 成功畫面（送出後顯示，擋住其餘內容）
@@ -299,6 +301,7 @@ if "choices" not in st.session_state:
 if st.session_state.submitted:
     perfect = sum(1 for r in st.session_state.submit_summary if r[4] == "✅")
     compromise = sum(1 for r in st.session_state.submit_summary if r[4] == "🔺")
+    replace = sum(1 for r in st.session_state.submit_summary if r[4] == "🔥")
     total = len(st.session_state.submit_summary)
 
     st.markdown(f"""
@@ -322,6 +325,10 @@ if st.session_state.submitted:
                     <div style="font-size:0.75rem; color:#6b7280;">浮動妥協</div>
                 </div>
                 <div style="text-align:center;">
+                    <div style="font-size:2.5rem; font-weight:900; color:#ef4444;">{replace}</div>
+                    <div style="font-size:0.75rem; color:#6b7280;">實戰替換</div>
+                </div>
+                <div style="text-align:center;">
                     <div style="font-size:2.5rem; font-weight:900; color:#9ca3af;">{total}</div>
                     <div style="font-size:0.75rem; color:#6b7280;">總任務</div>
                 </div>
@@ -337,6 +344,7 @@ if st.session_state.submitted:
         st.session_state.submitted = False
         st.session_state.submit_summary = []
         st.session_state.choices = {}
+        st.session_state.replace_reasons = {}
         st.rerun()
     st.stop()
 
@@ -381,14 +389,14 @@ if not tasks:
 # ─────────────────────────────────────────
 # 6. 任務列表 + 單選元件
 # ─────────────────────────────────────────
-OPTIONS = ["未選擇", "✅ 完美燃燒", "🔺 浮動妥協"]
+OPTIONS = ["未選擇", "✅ 完美燃燒", "🔺 浮動妥協", "🔥 實戰替換"]
 
 st.markdown(f'<div class="task-count">共 {len(tasks)} 項任務｜請逐一如實填寫</div>', unsafe_allow_html=True)
 
 for i, task in enumerate(tasks):
     task_name = str(task.get("任務名稱", f"任務 {i+1}")).strip()
-    task_period = str(task.get("時段", "")).strip()   # 早上/下午/晚上
-    task_time   = str(task.get("時間", "")).strip()   # 07:00-08:00
+    task_period = str(task.get("時段", "")).strip()
+    task_time   = str(task.get("時間", "")).strip()
 
     time_label = " ".join(filter(None, [task_period, task_time]))
 
@@ -401,6 +409,7 @@ for i, task in enumerate(tasks):
     )
 
     key = f"task_{i}_{task_name}"
+    reason_key = f"reason_{i}_{task_name}"
     current_val = st.session_state.choices.get(key, OPTIONS[0])
 
     choice = st.radio(
@@ -413,19 +422,44 @@ for i, task in enumerate(tasks):
     )
     st.session_state.choices[key] = choice
 
+    # 選了「🔥 實戰替換」才彈出必填文字框
+    if choice == "🔥 實戰替換":
+        reason = st.text_input(
+            label="替換原因",
+            placeholder="請輸入賽事名稱或替換原因",
+            key=reason_key,
+            label_visibility="collapsed",
+        )
+        st.session_state.replace_reasons[key] = reason.strip()
+    else:
+        # 清除舊的原因（若之前選過 🔥 再改回去）
+        st.session_state.replace_reasons.pop(key, None)
+
 st.divider()
 
 # ─────────────────────────────────────────
 # 7. 防呆鎖定 + 送出按鈕
 # ─────────────────────────────────────────
-all_filled = all(
+# 防呆 1：所有任務都要選
+choices_filled = all(
     v != "未選擇" for v in st.session_state.choices.values()
 ) and len(st.session_state.choices) == len(tasks)
 
-unanswered = sum(1 for v in st.session_state.choices.values() if v == "未選擇")
+# 防呆 2：選了 🔥 的任務，原因不能空白
+replace_filled = all(
+    reason != ""
+    for key, reason in st.session_state.replace_reasons.items()
+)
 
-if not all_filled:
+all_filled = choices_filled and replace_filled
+
+unanswered = sum(1 for v in st.session_state.choices.values() if v == "未選擇")
+unfilled_reason = sum(1 for r in st.session_state.replace_reasons.values() if r == "")
+
+if unanswered > 0:
     st.caption(f"⚠️ 還有 **{unanswered}** 項任務尚未填寫，填完才能送出。")
+elif unfilled_reason > 0:
+    st.caption(f"⚠️ 有 **{unfilled_reason}** 項「實戰替換」尚未填寫原因。")
 
 submit_clicked = st.button(
     "📤 送出今日訓練日誌",
@@ -444,9 +478,16 @@ if submit_clicked and all_filled:
         task_name = str(task.get("任務名稱", f"任務 {i+1}")).strip()
         key = f"task_{i}_{task_name}"
         status = st.session_state.choices.get(key, "未選擇")
-        # 將 emoji 標籤轉為純狀態符號
-        status_clean = "✅" if "完美燃燒" in status else "🔺"
-        rows_to_write.append([now_str, selected_name, weekday_str, task_name, status_clean])
+
+        if "完美燃燒" in status:
+            status_clean = "✅"
+        elif "浮動妥協" in status:
+            status_clean = "🔺"
+        else:
+            status_clean = "🔥"
+
+        replace_reason = st.session_state.replace_reasons.get(key, "")
+        rows_to_write.append([now_str, selected_name, weekday_str, task_name, status_clean, replace_reason])
 
     try:
         append_logs(rows_to_write)
@@ -454,6 +495,7 @@ if submit_clicked and all_filled:
         st.session_state.submitted = True
         st.session_state.submit_summary = rows_to_write
         st.session_state.choices = {}
+        st.session_state.replace_reasons = {}
         fetch_schedule.clear()
         st.rerun()
     except Exception as e:
