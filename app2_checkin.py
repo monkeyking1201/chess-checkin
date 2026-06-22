@@ -5,7 +5,7 @@ Mobile-First Streamlit App with Google Sheets Integration
 
 import streamlit as st
 import gspread
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -280,7 +280,8 @@ WEEKDAY_MAP = {
     6: "星期日",
 }
 
-today = datetime.now()
+TW_TZ = timezone(timedelta(hours=8))
+today = datetime.now(TW_TZ)
 today_str = today.strftime("%Y-%m-%d %H:%M")
 weekday_str = WEEKDAY_MAP[today.weekday()]
 
