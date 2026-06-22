@@ -194,6 +194,21 @@ def fetch_schedule(name: str, weekday_str: str) -> list[dict]:
         st.error(f"讀取 Schedule_DB 失敗：{e}")
         return []
 
+def fetch_pins() -> dict:
+    """從 Schedule_DB 的 PIN 工作表讀取姓名→PIN 對應表，session 內快取。"""
+    if "pin_map" not in st.session_state:
+        try:
+            client = get_gspread_client()
+            sheet = client.open("Schedule_DB").worksheet("PIN")
+            rows = sheet.get_all_values()
+            st.session_state.pin_map = {
+                str(r[0]).strip(): str(r[1]).strip()
+                for r in rows if len(r) >= 2 and r[0] and r[1]
+            }
+        except Exception:
+            st.session_state.pin_map = {}
+    return st.session_state.pin_map
+
 def get_student_names() -> list[str]:
     """從 Schedule_DB 讀取不重複的學員姓名清單，session 內快取避免超出 API 限額。"""
     if "student_names" not in st.session_state:
@@ -295,7 +310,11 @@ if "submit_summary" not in st.session_state:
 if "choices" not in st.session_state:
     st.session_state.choices = {}
 if "replace_reasons" not in st.session_state:
-    st.session_state.replace_reasons = {}  # key -> 替換原因文字
+    st.session_state.replace_reasons = {}
+if "pin_verified" not in st.session_state:
+    st.session_state.pin_verified = False
+if "pin_verified_for" not in st.session_state:
+    st.session_state.pin_verified_for = ""
 
 # ─────────────────────────────────────────
 # 4. 成功畫面（送出後顯示，擋住其餘內容）
@@ -347,6 +366,8 @@ if st.session_state.submitted:
         st.session_state.submit_summary = []
         st.session_state.choices = {}
         st.session_state.replace_reasons = {}
+        st.session_state.pin_verified = False
+        st.session_state.pin_verified_for = ""
         st.rerun()
     st.stop()
 
@@ -363,6 +384,33 @@ if not names:
 
 selected_name = st.selectbox("選擇學員", names, label_visibility="collapsed",
                               placeholder="── 請選擇學員姓名 ──")
+
+# 換人時重置驗證狀態
+if selected_name != st.session_state.pin_verified_for:
+    st.session_state.pin_verified = False
+    st.session_state.pin_verified_for = selected_name
+    st.session_state.choices = {}
+    st.session_state.replace_reasons = {}
+
+# ── PIN 驗證 ──
+if not st.session_state.pin_verified:
+    st.markdown("---")
+    pin_input = st.text_input(
+        "請輸入您的 PIN 碼",
+        type="password",
+        max_chars=4,
+        placeholder="4 位數字",
+        label_visibility="visible",
+    )
+    if st.button("確認身份", use_container_width=True):
+        pin_map = fetch_pins()
+        correct = pin_map.get(selected_name, "")
+        if pin_input.strip() == correct:
+            st.session_state.pin_verified = True
+            st.rerun()
+        else:
+            st.error("❌ PIN 碼錯誤，請重新輸入。")
+    st.stop()
 
 # 星期大標題
 st.markdown(f'<div class="day-title">📅 {weekday_str}</div>', unsafe_allow_html=True)
