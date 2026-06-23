@@ -315,6 +315,8 @@ if "pin_verified" not in st.session_state:
     st.session_state.pin_verified = False
 if "pin_verified_for" not in st.session_state:
     st.session_state.pin_verified_for = ""
+if "is_submitting" not in st.session_state:
+    st.session_state.is_submitting = False
 
 # ─────────────────────────────────────────
 # 4. 成功畫面（送出後顯示，擋住其餘內容）
@@ -520,8 +522,9 @@ submit_clicked = st.button(
 # ─────────────────────────────────────────
 # 8. 資料寫入 Log_DB
 # ─────────────────────────────────────────
-if submit_clicked and all_filled:
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+if submit_clicked and all_filled and not st.session_state.is_submitting:
+    st.session_state.is_submitting = True
+    now_str = datetime.now(TW_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
     rows_to_write = []
     for i, task in enumerate(tasks):
@@ -546,7 +549,9 @@ if submit_clicked and all_filled:
         st.session_state.submit_summary = rows_to_write
         st.session_state.choices = {}
         st.session_state.replace_reasons = {}
+        st.session_state.is_submitting = False
         fetch_schedule.clear()
         st.rerun()
     except Exception as e:
+        st.session_state.is_submitting = False
         st.error(f"❌ 寫入失敗，請稍後再試：{e}")
