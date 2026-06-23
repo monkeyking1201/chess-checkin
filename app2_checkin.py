@@ -209,6 +209,23 @@ def fetch_pins() -> dict:
             st.session_state.pin_map = {}
     return st.session_state.pin_map
 
+def check_already_submitted(name: str, date_str: str) -> bool:
+    """檢查該學員今日是否已在 Log_DB 送出過紀錄。結果 session 內快取。"""
+    cache_key = f"already_submitted_{name}_{date_str}"
+    if cache_key not in st.session_state:
+        try:
+            client = get_gspread_client()
+            sheet = client.open("Log_DB").sheet1
+            rows = sheet.get_all_values()
+            # 第一欄是時間字串，格式 "2026-06-23 ..."，第二欄是姓名
+            st.session_state[cache_key] = any(
+                str(r[1]).strip() == name and str(r[0]).startswith(date_str)
+                for r in rows if len(r) >= 2
+            )
+        except Exception:
+            st.session_state[cache_key] = False
+    return st.session_state[cache_key]
+
 def get_student_names() -> list[str]:
     """從 Schedule_DB 讀取不重複的學員姓名清單，session 內快取避免超出 API 限額。"""
     if "student_names" not in st.session_state:
@@ -414,6 +431,25 @@ if not st.session_state.pin_verified:
             st.error("❌ PIN 碼錯誤，請重新輸入。")
     st.stop()
 
+# ── 今日是否已打卡 ──
+today_date_str = today.strftime("%Y-%m-%d")
+if check_already_submitted(selected_name, today_date_str):
+    st.markdown(f"""
+    <div style="text-align:center; padding:3rem 1rem;">
+        <div style="font-size:3rem;">✅</div>
+        <div style="font-size:1.6rem; font-weight:900; color:#34d399; margin:0.5rem 0;">
+            今日打卡已完成
+        </div>
+        <div style="font-size:0.9rem; color:#6b7280; margin-top:0.5rem;">
+            {selected_name}｜{weekday_str}
+        </div>
+        <div style="font-size:0.8rem; color:#4b5563; margin-top:1.5rem;">
+            如需修改，請聯繫教練。
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()
+
 # 星期大標題
 st.markdown(f'<div class="day-title">📅 {weekday_str}</div>', unsafe_allow_html=True)
 
@@ -550,6 +586,9 @@ if submit_clicked and all_filled and not st.session_state.is_submitting:
         st.session_state.choices = {}
         st.session_state.replace_reasons = {}
         st.session_state.is_submitting = False
+        # 清除今日打卡快取，讓下次重新確認
+        cache_key = f"already_submitted_{selected_name}_{today_date_str}"
+        st.session_state.pop(cache_key, None)
         fetch_schedule.clear()
         st.rerun()
     except Exception as e:
